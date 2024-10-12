@@ -2,7 +2,7 @@ mod stories;
 mod chapters;
 mod router;
 
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Request, Server};
 use hyper::service::{make_service_fn, service_fn};
 use std::convert::Infallible;
 use reqwest::Client;
