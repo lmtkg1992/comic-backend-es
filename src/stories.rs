@@ -12,8 +12,9 @@ pub fn fetch_story_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<dy
         }
         let url_key = &path_parts[2];
 
-        // Elasticsearch query
         let es_host = std::env::var("ES_HOST").unwrap_or_else(|_| "http://localhost:9200".to_string());
+        let es_username = std::env::var("ES_USERNAME").unwrap_or_else(|_| "elastic".to_string());
+        let es_password = std::env::var("ES_PASSWORD").unwrap_or_else(|_| "password".to_string());
 
         let query = json!({
             "query": {
@@ -27,6 +28,7 @@ pub fn fetch_story_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<dy
 
         let response = client
             .post(&es_url)
+            .basic_auth(es_username, Some(es_password))
             .json(&query)
             .send()
             .await;
