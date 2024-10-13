@@ -15,9 +15,6 @@ pub fn fetch_story_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<dy
         // Extract the url_key from the last part of the path
         let url_key = &path_parts[3];
 
-        // Print the url_key value for debugging
-        println!("URL Key: {}", url_key);
-
         let es_host = std::env::var("ES_HOST").unwrap_or_else(|_| "http://localhost:9200".to_string());
         let es_username = std::env::var("ES_USERNAME").unwrap_or_else(|_| "elastic".to_string());
         let es_password = std::env::var("ES_PASSWORD").unwrap_or_else(|_| "password".to_string());
