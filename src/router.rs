@@ -19,6 +19,11 @@ impl Router {
     pub fn new() -> Self {
         let mut routes: HashMap<String, Handler> = HashMap::new();
 
+        // Route for fetching stories
+        routes.insert("/stories/list".to_string(), Box::new(move |client, _path_parts, query_params| {
+            stories::fetch_stories(client, query_params)
+        }));
+
         // Route for fetching stories by category
         routes.insert("/stories/list_by_category".to_string(), Box::new(move |client, path_parts, query_params| {
             if path_parts.len() < 4 {

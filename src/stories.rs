@@ -5,7 +5,105 @@ use std::convert::Infallible;
 use std::pin::Pin;
 use std::future::Future;
 use hyper::header::{CONTENT_TYPE};
+use std::collections::HashMap;
 
+pub fn fetch_stories(client: Client, query_params: HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>> {
+    Box::pin(async move {
+        let es_host = std::env::var("ES_HOST").unwrap_or_else(|_| "http://localhost:9200".to_string());
+        let es_username = std::env::var("ES_USERNAME").unwrap_or_else(|_| "elastic".to_string());
+        let es_password = std::env::var("ES_PASSWORD").unwrap_or_else(|_| "password".to_string());
+
+        let page = query_params.get("page").and_then(|p| p.parse::<usize>().ok()).unwrap_or(1);
+        let size = query_params.get("size").and_then(|s| s.parse::<usize>().ok()).unwrap_or(10);
+        let from = (page - 1) * size;
+
+        // Elasticsearch query construction
+        let mut must_clauses = vec![];
+
+        if let Some(title) = query_params.get("title") {
+            must_clauses.push(json!({ "match": { "title": title } }));
+        }
+
+        if let Some(author_id) = query_params.get("author_id") {
+            must_clauses.push(json!({ "term": { "author.author_id.keyword": author_id } }));
+        }
+
+        if let Some(is_full) = query_params.get("is_full") {
+            if is_full == "true" {
+                must_clauses.push(json!({ "term": { "is_full": true } }));
+            }
+        }
+
+        let mut query = json!({
+            "query": {
+                "bool": {
+                    "must": must_clauses
+                }
+            },
+            "from": from,
+            "size": size
+        });
+
+        // Add sorting by latest if required
+        if let Some(sort_by_latest) = query_params.get("sort_by_latest") {
+            if sort_by_latest == "true" {
+                query["sort"] = json!([{ "updated_date": { "order": "desc" } }]);
+            }
+        }
+
+        let es_url = format!("{}/stories/_search", es_host);
+
+        // Send the request to Elasticsearch
+        let response = client
+            .post(&es_url)
+            .basic_auth(es_username, Some(es_password))
+            .json(&query)
+            .send()
+            .await;
+
+        match response {
+            Ok(res) if res.status().is_success() => {
+                // Parse the response to extract the stories and pagination info
+                let body = res.json::<serde_json::Value>().await.unwrap();
+
+                let empty_vec = vec![];
+                let stories: Vec<&serde_json::Value> = body["hits"]["hits"]
+                    .as_array()
+                    .unwrap_or(&empty_vec)
+                    .iter()
+                    .map(|hit| &hit["_source"])
+                    .collect();
+
+                let total = body["hits"]["total"]["value"].as_u64().unwrap_or(0);
+                let total_page = (total as f64 / size as f64).ceil() as usize;
+
+                // Build the final response
+                let response_body = json!({
+                    "message": "Successfully",
+                    "error": false,
+                    "data": {
+                        "list": stories,
+                        "total": total,
+                        "total_page": total_page
+                    }
+                });
+
+                Ok(Response::builder()
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(response_body.to_string()))
+                    .unwrap())
+            }
+            Ok(res) => Ok(Response::builder()
+                .status(res.status())
+                .body(Body::from("Failed to fetch stories"))
+                .unwrap()),
+            Err(err) => Ok(Response::builder()
+                .status(500)
+                .body(Body::from(format!("Elasticsearch error: {:?}", err)))
+                .unwrap()),
+        }
+    })
+}
 
 pub fn fetch_stories_by_category(client: Client, category_id: String, page: usize, size: usize, sort_by_latest: bool) -> Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>> {
     Box::pin(async move {
