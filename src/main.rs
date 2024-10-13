@@ -2,7 +2,7 @@ mod stories;
 mod chapters;
 mod router;
 
-use hyper::{Body, Request, Server};
+use hyper::{Body, Request, Server, Response, Method};
 use hyper::service::{make_service_fn, service_fn};
 use std::convert::Infallible;
 use reqwest::Client;
@@ -14,7 +14,7 @@ async fn main() {
     dotenv().ok();
     let client = Client::new();
     let addr = ([0, 0, 0, 0], 8084).into();
-    let router = Arc::new(router::Router::new()); // Shared router
+    let router = Arc::new(router::Router::new());
 
     let make_svc = make_service_fn(move |_conn| {
         let client = client.clone();
@@ -24,7 +24,20 @@ async fn main() {
                 let client = client.clone();
                 let router = router.clone();
                 async move {
-                    router.route_request(&client, req).await
+                    if req.method() == Method::OPTIONS {
+                        // Handle preflight CORS requests
+                        return Ok::<_, Infallible>(Response::builder()
+                            .header("Access-Control-Allow-Origin", "*")
+                            .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+                            .header("Access-Control-Allow-Headers", "Content-Type")
+                            .body(Body::empty())
+                            .unwrap());
+                    }
+
+                    let mut response = router.route_request(&client, req).await?;
+                    // Add CORS headers to every response
+                    response.headers_mut().insert("Access-Control-Allow-Origin", "*".parse().unwrap());
+                    Ok::<_, Infallible>(response)
                 }
             }))
         }
