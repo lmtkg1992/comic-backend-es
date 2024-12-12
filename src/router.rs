@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::future::Future;
 use crate::stories;
 use crate::chapters;
-
+use crate::categories;
 type ResponseFuture = Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>>;
 
 type Handler = Box<dyn Fn(Client, Vec<String>, HashMap<String, String>) -> ResponseFuture + Send + Sync>;
@@ -50,6 +50,25 @@ impl Router {
         routes.insert("/chapters/detail_by_url".to_string(), Box::new(move |client, path_parts, _| {
             chapters::fetch_chapter_detail(client, path_parts)
         }));
+
+        routes.insert("/categories/list".to_string(), Box::new(move |client, _path_parts, query_params| {
+            categories::fetch_categories(client, query_params)
+        }));
+
+        routes.insert("/categories/detail_by_url_key".to_string(), Box::new(move |client, path_parts, _query_params| {
+            if path_parts.len() < 4 {
+                return Box::pin(async {
+                    Ok(Response::builder()
+                        .status(400)
+                        .body(Body::from("Bad Request: Missing URL key"))
+                        .unwrap())
+                });
+            }
+        
+            let url_key = path_parts[3].clone(); // Extract the URL key from the path
+            categories::fetch_category_detail_by_url_key(client, url_key)
+        }));
+        
 
         Router { routes }
     }

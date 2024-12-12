@@ -24,8 +24,8 @@ pub fn fetch_chapter_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<
             "query": {
                 "bool": {
                     "must": [
-                        { "term": { "story_url_key.keyword": story_key }},
-                        { "term": { "url_key.keyword": chapter_key }}
+                        { "term": { "story_url_key": story_key }},
+                        { "term": { "url_key": chapter_key }}
                     ]
                 }
             }

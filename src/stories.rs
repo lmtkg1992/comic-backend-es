@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::future::Future;
 use hyper::header::{CONTENT_TYPE};
 use std::collections::HashMap;
+use urlencoding::decode;
 
 pub fn fetch_stories(client: Client, query_params: HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>> {
     Box::pin(async move {
@@ -21,7 +22,8 @@ pub fn fetch_stories(client: Client, query_params: HashMap<String, String>) -> P
         let mut must_clauses = vec![];
 
         if let Some(title) = query_params.get("title") {
-            must_clauses.push(json!({ "match": { "title": title } }));
+            let decoded_title = decode(title).unwrap_or_else(|_| title.to_string().into());
+            must_clauses.push(json!({ "match": { "title": decoded_title } }));
         }
 
         if let Some(author_id) = query_params.get("author_id") {
@@ -50,6 +52,9 @@ pub fn fetch_stories(client: Client, query_params: HashMap<String, String>) -> P
                 query["sort"] = json!([{ "updated_date": { "order": "desc" } }]);
             }
         }
+
+       // Print the constructed Elasticsearch query for debugging
+        println!("Elasticsearch Query: {}", query);
 
         let es_url = format!("{}/stories/_search", es_host);
 
@@ -126,7 +131,7 @@ pub fn fetch_stories_by_category(client: Client, category_id: String, page: usiz
 
         // Add sorting if `sort_by_latest` is true
         if sort_by_latest {
-            query["sort"] = json!([{ "updated_date": { "order": "desc" } }]);
+           query["sort"] = json!([{ "updated_date": { "order": "desc" } }]);
         }
 
         let es_url = format!("{}/stories/_search", es_host);
@@ -202,10 +207,11 @@ pub fn fetch_story_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<dy
         let query = json!({
             "query": {
                 "term": {
-                    "url_key.keyword": url_key
+                    "url_key": url_key
                 }
             }
         });
+
 
         let es_url = format!("{}/stories/_search", es_host);
 
