@@ -6,6 +6,90 @@ use std::pin::Pin;
 use std::future::Future;
 use hyper::header::{CONTENT_TYPE};
 
+pub fn fetch_chapters_by_story_id(client: Client, story_id: String, page: usize, size: usize) -> Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>> {
+    Box::pin(async move {
+        let es_host = std::env::var("ES_HOST").unwrap_or_else(|_| "http://localhost:9200".to_string());
+        let es_username = std::env::var("ES_USERNAME").unwrap_or_else(|_| "elastic".to_string());
+        let es_password = std::env::var("ES_PASSWORD").unwrap_or_else(|_| "password".to_string());
+
+        let es_url = format!("{}/chapters/_search", es_host);
+
+        let from = (page - 1) * size;
+
+        let query = json!({
+            "query": {
+                "term": {
+                    "story_id": story_id
+                }
+            },
+            "from": from,
+            "size": size,
+            "sort": [{ "ordered": { "order": "asc" } }]
+        });
+
+        let response = client
+            .post(&es_url)
+            .basic_auth(es_username, Some(es_password))
+            .json(&query)
+            .send()
+            .await;
+
+        match response {
+            Ok(res) if res.status().is_success() => {
+                let body = res.json::<serde_json::Value>().await.unwrap();
+
+                let empty_vec = vec![];
+                let chapters: Vec<serde_json::Value> = body["hits"]["hits"]
+                    .as_array()
+                    .unwrap_or(&empty_vec)
+                    .iter()
+                    .map(|hit| {
+                        let source = &hit["_source"];
+                        json!({
+                            "chapter_id": source["chapter_id"],
+                            "story_id": source["story_id"],
+                            "increment_id": source["increment_id"],
+                            "title": source["title"],
+                            "short_title": source["short_title"],
+                            "url_key": source["url_key"],
+                            "ordered": source["ordered"],
+                            "status": source["status"],
+                            "created_date": source["created_date"],
+                            "updated_date": source["updated_date"]
+                        })
+                    })
+                    .collect();
+
+                let total = body["hits"]["total"]["value"].as_u64().unwrap_or(0);
+                let total_page = (total as f64 / size as f64).ceil() as usize;
+
+                let response_body = json!({
+                    "message": "Successfully",
+                    "error": false,
+                    "data": {
+                        "list": chapters,
+                        "total": total,
+                        "total_page": total_page
+                    }
+                });
+
+                Ok(Response::builder()
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(response_body.to_string()))
+                    .unwrap())
+            }
+            Ok(res) => Ok(Response::builder()
+                .status(res.status())
+                .body(Body::from("Failed to fetch chapters"))
+                .unwrap()),
+            Err(err) => Ok(Response::builder()
+                .status(500)
+                .body(Body::from(format!("Elasticsearch error: {:?}", err)))
+                .unwrap()),
+        }
+    })
+}
+
 pub fn fetch_chapter_detail(client: Client, path_parts: Vec<String>) -> Pin<Box<dyn Future<Output = Result<Response<Body>, Infallible>> + Send>> {
     Box::pin(async move {
         if path_parts.len() < 5 {

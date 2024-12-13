@@ -27,7 +27,7 @@ pub fn fetch_stories(client: Client, query_params: HashMap<String, String>) -> P
         }
 
         if let Some(author_id) = query_params.get("author_id") {
-            must_clauses.push(json!({ "term": { "author.author_id.keyword": author_id } }));
+            must_clauses.push(json!({ "term": { "author.author_id": author_id } }));
         }
 
         if let Some(is_full) = query_params.get("is_full") {

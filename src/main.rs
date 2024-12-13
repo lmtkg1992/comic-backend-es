@@ -1,6 +1,7 @@
 mod stories;
 mod chapters;
 mod categories;
+mod authors;
 mod router;
 
 use hyper::{Body, Request, Response, Server, Method};
